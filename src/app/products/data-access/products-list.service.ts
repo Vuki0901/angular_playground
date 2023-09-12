@@ -1,25 +1,71 @@
-import {inject, Injectable} from "@angular/core";
-import {ProductsApiService} from "../../shared/utils/services/api-services/products-api.service";
+import {computed, inject, Injectable, Signal, WritableSignal} from "@angular/core";
+import {ProductsApiService, ProductsResponse} from "../../shared/utils/services/api-services/products-api.service";
 import {Product} from "../../shared/utils/model/products/product.model";
-import {Observable} from "rxjs";
-import {signal, computed} from "@angular/core";
+import {first, map, Observable, Subject} from "rxjs";
+import {signal} from "@angular/core";
+import {takeUntilDestroyed} from "@angular/core/rxjs-interop";
 
 export interface ProductsListState {
-  products: Product[];
+  products: WritableSignal<Product[]>;
+  counter: WritableSignal<number>;
 }
 
-@Injectable()
+/*export interface ProductsListState {
+  products: Product[];
+  counter: number;
+}*/
+
+@Injectable({
+  providedIn: 'root',
+
+})
 export class ProductsListService {
   private apiService: ProductsApiService = inject(ProductsApiService);
 
   // State
-  private state = signal<ProductsListState>({
-    products: []
-  });
+  private state: ProductsListState = {
+    products: signal<Product[]>([]),
+    counter: signal<number>(0),
+  };
+
+  /*private state: WritableSignal<ProductsListState> = signal<ProductsListState>({
+    products: [],
+    counter: 0,
+  });*/
 
   // Selectors
-  public readonly products = computed(() => this.state().products);
+  /*public readonly products: Signal<Product[]> = computed(() => this.state().products);
+  public readonly counter: Signal<number> = computed(() => this.state().counter);*/
+
+  public readonly products: Signal<Product[]> = this.state.products;
+  public readonly counter: Signal<number> = this.state.counter;
 
   // Sources
-  productsLoaded$: Observable<Product[]> = this.apiService.get();
+  productsLoaded$: Observable<ProductsResponse> = this.apiService.get();
+  counterIncrement$: Subject<number> = new Subject<number>();
+
+  constructor() {
+    console.log("Service ctor")
+    // Reducers
+    this.productsLoaded$.pipe(first()).subscribe({
+      next: (response: ProductsResponse) =>
+        this.state.products.set(response.products)
+      /*this.state.update(state => ({
+        ...state,
+        products: response.products
+      }))*/
+    })
+
+    this.counterIncrement$
+      .pipe(takeUntilDestroyed())
+      .pipe(map(value => this.counter() + value))
+      .subscribe({
+      next: value =>
+        this.state.counter.set(value)
+        /*this.state.update(state => ({
+          ...state,
+          counter: value
+        }))*/
+    })
+  }
 }
